@@ -341,14 +341,134 @@ pending ──► active ──► completed
 
 ## 8. Osma SDK Integration
 
-The Osma SDK is used as the foundational communication and creation layer:
+The Osma SDK (`pip install osma`) is the foundational infrastructure layer. The cognitive architecture is independent of Osma; Osma provides the communication, LLM, and tool execution substrate.
 
-- **Messaging**: Human-in-the-loop questions and responses flow through Osma
-- **Agent Creation**: spawn_agent() uses Osma to create new agent instances
-- **Tool Creation**: The agent can create new tools on the fly via Osma when it detects a CapabilityImpasse
-- **Event Delivery**: EventWake triggers come through Osma's event system
+### SDK Initialization
 
-The AutonomousAgent does NOT embed Osma — it uses Osma as an SDK/client. The cognitive architecture is independent; Osma provides the infrastructure.
+```python
+from osma import OsmaClient
+
+osma = OsmaClient(api_key="osma_...", base_url="production")
+```
+
+### Mapping: Cognitive Concepts → Osma SDK
+
+| Cognitive Concept | Osma SDK Implementation |
+|---|---|
+| **LLM Reasoning** | `osma.threads.create_message(thread_id, content, role="user")` — runs router → RAG → LLM → tools pipeline. Returns assistant Message. |
+| **Streaming Reasoning** | `osma.threads.stream_message(thread_id, content)` — SSE streaming for real-time output. |
+| **spawn_agent()** | `osma.lambda_agents.create(name, llm_model, system_prompt, enable_tool_calls=True)` — creates a standalone agent with its own HTTP endpoint, system prompt, tools, and RAG. Invoke via `osma.lambda_agents.test(agent_id, message)` or direct HTTP POST to `/ai/api/lambda-agents/webhook/{slug}/`. |
+| **spawn_worker()** | `osma.workflows.execute(workflow_id, input_data)` — executes a multi-step workflow (REST API calls, validation, transformation, LLM steps). For one-shot tasks, use a Lambda Agent with `test()`. |
+| **ask_human()** | `osma.threads.update_taken_by(thread_id, "Human")` — switches thread to human mode. Send question via `create_message(role="system")`. When human responds, detect response in next PERCEIVE cycle, then switch back: `update_taken_by(thread_id, "AI")`. |
+| **Working Memory (cross-cycle)** | `thread.metadata` — persistent dict on the thread, accessible in prompts via `{metadata[key]}`. Use `osma.threads.update_metadata()` (REPLACES, not merges — always read-merge-write). |
+| **Session Context** | `thread.session_data` — temporary dict, set at `threads.create()`, accessible via `{session_data[key]}`. Write-only (not reliably returned by GET). |
+| **Semantic Memory (RAG)** | `osma.knowledge.create(name, prompt, vector_top_k)` — creates a Knowledge Base. Upload docs with `upload_document()`. Attach to routes/lambda agents via `use_similarity_context=True, similarity_process=sp.id`. |
+| **MCP Tools** | `osma.mcp_servers.create(name, server_url, transport="http_sse")` — registers external tool providers. Attach to Lambda Agents via `osma.lambda_agents.tool_configs.create(agent_id, tool_source_type="mcp_server", mcp_server=server.id)`. |
+| **Workflow Tools** | Create workflow → trigger (`trigger_type="tool_call"`) → `tool_call_configs.create(tool_name, tool_description, input_schema)`. When LLM invokes the tool, workflow executes synchronously and result feeds back to LLM. |
+| **Create tools on-the-fly** | On CapabilityImpasse, the agent can: (1) create a new Workflow with steps and tool_call trigger, or (2) register a new MCP server, and attach them to its Lambda Agent. |
+| **EventWake (new message)** | Poll `osma.threads.list_messages(thread_id)` for new messages, or use Route/Lambda Agent webhooks to receive callbacks at a configured URL. |
+| **Thread Summaries** | `osma.threads.get_summary(thread_id)` — returns AI-generated topic, key_points, next_steps, summary. Useful for REFLECT phase. |
+
+### Conversation Architecture
+
+Each AutonomousAgent owns one primary **Thread** for its main conversation context. Sub-agents get their own threads.
+
+```python
+# Main agent thread — carries persistent context in metadata
+main_thread = osma.threads.create(
+    external_user_id=f"agent_{agent_id}",
+    metadata={
+        "agent_id": agent_id,
+        "agent_type": "autonomous",
+        "current_tasks": [],          # Serialized task refs
+        "drive_state": {},            # Current drive pressures
+    },
+)
+
+# Sub-agent gets its own thread
+sub_thread = osma.threads.create(
+    external_user_id=f"agent_{agent_id}_sub_{sub_id}",
+    metadata={
+        "parent_agent_id": agent_id,
+        "parent_task_id": task_id,
+        "delegated_objective": "...",
+    },
+)
+```
+
+### Human-in-the-Loop Flow
+
+```
+1. Agent detects InformationImpasse
+2. task.status = blocked, task.blocked_reason = "awaiting_human"
+3. osma.threads.create_message(thread_id, content=question, role="system")
+4. osma.threads.update_taken_by(thread_id, "Human")
+5. --- agent continues with other tasks ---
+6. Next PERCEIVE cycle: check thread for new messages from human
+7. If human responded:
+   a. osma.threads.update_taken_by(thread_id, "AI")
+   b. task.status = active (unblocked)
+   c. Human response enters working memory as a Perception
+```
+
+### Creating Sub-Agents (Lambda Agents)
+
+```python
+# spawn_agent() implementation
+sub_agent = osma.lambda_agents.create(
+    name=f"sub_{parent_agent_id}_{task_id}",
+    llm_model=1,                    # Can be configured per task
+    system_prompt=f"You are a specialist agent. Your objective: {objective}",
+    enable_tool_calls=True,
+    enable_rag=enable_rag,
+    similarity_process=kb_id if enable_rag else None,
+)
+
+# Attach tools if needed
+if mcp_servers:
+    for server_id in mcp_servers:
+        osma.lambda_agents.tool_configs.create(
+            agent_id=sub_agent.id,
+            tool_source_type="mcp_server",
+            mcp_server=server_id,
+            tool_selection_mode="all",
+        )
+
+# Invoke the sub-agent
+result = osma.lambda_agents.test(sub_agent.id, message=task_description)
+
+# Check execution history
+executions = osma.lambda_agents.get_executions(sub_agent.id)
+```
+
+### Creating Workers (Workflows)
+
+```python
+# spawn_worker() for a REST API call
+workflow = osma.workflows.create(name=f"worker_{task_id}", status="active")
+step = osma.workflows.steps.create(
+    workflow_id=workflow.id,
+    name="Execute",
+    order=1,
+    step_type="rest_api",
+    rest_api_config={
+        "url": api_url,
+        "method": method,
+        "headers": headers,
+        "body_template": body,
+    },
+)
+execution = osma.workflows.execute(workflow.id, input_data=input_data)
+```
+
+### SDK Constraints
+
+1. **Synchronous only** — The Osma SDK uses `requests` (no async). Our async cognitive loop must wrap calls with `asyncio.to_thread()`.
+2. **`update_metadata` replaces** — Always read-merge-write: `meta = osma.threads.get(id).metadata; meta.update(changes); osma.threads.update_metadata(id, meta)`.
+3. **Document upload is async** — `upload_document()` returns a `task_id`. Documents take time to become searchable.
+4. **Lambda Agent `test()` returns raw dict** — Not a Pydantic model. Structure: `{success, data, execution_id, execution_time_ms}`.
+5. **Workflow IDs are UUIDs** — Not integers. All other IDs (agents, threads, messages, MCP servers) are integers.
+6. **No native event push** — Osma does not push events to the agent. Perception requires polling threads/executions or setting up webhook endpoints that the agent hosts.
 
 ---
 
