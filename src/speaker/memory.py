@@ -6,7 +6,7 @@ import abc
 import enum
 import math
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -24,7 +24,7 @@ class MemoryEntry(BaseModel):
     kind: MemoryKind
     content: Any
     tags: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     access_times: list[datetime] = Field(default_factory=list)
 
 
@@ -72,7 +72,7 @@ class InMemoryStore(MemoryStore):
         if not self._entries:
             return []
 
-        now = datetime.utcnow()
+        now = datetime.now(tz=timezone.utc)
         query_tokens = set(query.query.lower().split())
         results: list[RetrievalResult] = []
 
@@ -103,12 +103,15 @@ class InMemoryStore(MemoryStore):
                     relevance=relevance,
                 ))
 
-            # Record this access for frequency tracking
-            entry.access_times.append(now)
-
         # Sort by activation (highest first), return top_k
         results.sort(key=lambda r: r.activation, reverse=True)
-        return results[: query.top_k]
+        top_results = results[: query.top_k]
+
+        # Record access only for retrieved entries
+        for r in top_results:
+            r.entry.access_times.append(now)
+
+        return top_results
 
     def _base_level_activation(self, entry: MemoryEntry, now: datetime) -> float:
         """ACT-R base-level activation: ln(Σ t_j^{-d})"""

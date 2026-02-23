@@ -15,6 +15,7 @@ class OsmaAdapter:
 
     def __init__(self, client: Any) -> None:
         self._client = client
+        self._metadata_lock = asyncio.Lock()
 
     # --- Threads ---
 
@@ -54,13 +55,14 @@ class OsmaAdapter:
         updates: dict[str, Any],
     ) -> None:
         """Merge updates into existing metadata (Osma replaces, so we read-merge-write)."""
-        thread = await asyncio.to_thread(self._client.threads.get, thread_id)
-        merged = {**(thread.metadata or {}), **updates}
-        await asyncio.to_thread(
-            self._client.threads.update_metadata,
-            thread_id,
-            merged,
-        )
+        async with self._metadata_lock:
+            thread = await asyncio.to_thread(self._client.threads.get, thread_id)
+            merged = {**(thread.metadata or {}), **updates}
+            await asyncio.to_thread(
+                self._client.threads.update_metadata,
+                thread_id,
+                merged,
+            )
 
     async def switch_to_human(self, thread_id: int) -> None:
         await asyncio.to_thread(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -41,18 +41,18 @@ class Perception(BaseModel):
     kind: str  # "new_task", "human_response", "agent_result", "event", "timeout"
     source: str
     content: Any
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
 
 class Thought(BaseModel):
     """An intermediate reasoning step stored in working memory scratchpad."""
     content: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
 
 class TaskAttempt(BaseModel):
     """Record of one attempt to work on a task."""
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     action_taken: str
     result: Any = None
     success: bool = False
@@ -71,7 +71,7 @@ class HumanRequest(BaseModel):
     question: str
     context: dict[str, Any] = Field(default_factory=dict)
     response: str | None = None
-    asked_at: datetime = Field(default_factory=datetime.utcnow)
+    asked_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     responded_at: datetime | None = None
 
 
@@ -101,8 +101,8 @@ class Task(BaseModel):
     subtasks: list[str] = Field(default_factory=list)
 
     result: Any = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
 
 # --- Working Memory ---

@@ -44,8 +44,7 @@ class TaskQueue:
         result = []
         for task in self.pending():
             deps_met = all(
-                self._tasks.get(dep_id, Task(description="")).status
-                == TaskStatus.COMPLETED
+                dep_id in self._tasks and self._tasks[dep_id].status == TaskStatus.COMPLETED
                 for dep_id in task.depends_on
             )
             if deps_met:
@@ -55,6 +54,6 @@ class TaskQueue:
     def has_work(self) -> bool:
         """True if there are pending or active tasks."""
         return any(
-            t.status in (TaskStatus.PENDING, TaskStatus.ACTIVE, TaskStatus.BLOCKED)
+            t.status in (TaskStatus.PENDING, TaskStatus.ACTIVE)
             for t in self._tasks.values()
         )

@@ -1,6 +1,6 @@
 # tests/test_memory.py
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from speaker.memory import (
     MemoryStore,
     InMemoryStore,
@@ -68,7 +68,7 @@ async def test_recency_boost():
         kind=MemoryKind.EPISODIC,
         content="old search result",
         tags=["search"],
-        created_at=datetime.utcnow() - timedelta(days=30),
+        created_at=datetime.now(tz=timezone.utc) - timedelta(days=30),
     )
     new = MemoryEntry(
         kind=MemoryKind.EPISODIC,
