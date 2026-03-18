@@ -1,6 +1,6 @@
 # PRD: Lineage — The Human-Driven, AI-Powered Project Platform
 
-**Version:** 0.2 (Draft)
+**Version:** 0.3 (Draft)
 **Date:** 2026-03-18
 **Status:** Ideation
 
@@ -111,9 +111,38 @@ Discovery
 - Creates an audit trail: "Why did we build this?" → trace to discovery research.
 - Discovery artifacts are referenceable from the spec: `[ref: D-001]`.
 
-### 3.2 The Spec Document (Master Document)
+### 3.2 The Spec Document & Master Spec
 
-A structured, versioned document that describes *what* the system should do. Not free-form prose — it has a schema:
+#### The Master Spec (Stable Branch)
+
+Every project has a **Master Spec** — the single source of truth for "what are we building right now?". Think of it as the `main` branch of functional requirements.
+
+```
+Master Spec (stable, approved, the truth)
+│
+├── Branch: "add-2fa-to-checkout"        ← PM is drafting new requirements
+│   └── FR-009: Two-factor auth at payment (draft)
+│   └── FR-010: SMS fallback (draft)
+│
+├── Branch: "simplify-returns-flow"      ← Under review
+│   └── FR-003 modified: reduce steps from 4 to 2
+│   └── FR-011: auto-refund for items < $50 (new)
+│
+└── Branch: "q2-performance-targets"     ← Approved, ready to merge
+    └── NFR-001 modified: p99 from 2s to 1.5s
+    └── NFR-005: CDN caching for static assets (new)
+```
+
+**Key rules:**
+- The Master Spec is **always deployable** — it represents the current approved functional reality.
+- Changes to the spec happen on **branches** (like git branches).
+- A branch goes through: `draft → review → approved → merged to master`.
+- Merging to master = "this is now officially what the product does."
+- **Conflict detection**: if two branches modify the same requirement, the system flags it.
+
+#### The Spec Document Schema
+
+Each requirement in the spec is a structured, versioned document — not free-form prose:
 
 ```
 Spec Document
@@ -126,9 +155,11 @@ Spec Document
 │   │   ├── Derived from: [H-001, D-research-interview-1]
 │   │   ├── Acceptance criteria
 │   │   ├── Edge cases
+│   │   ├── Status: ✅ implemented
 │   │   └── Links: [→ TP-001, → impl:checkout/flow.ts, → BUG-042]
 │   ├── FR-002: Real-time field validation
 │   │   ├── Derived from: [H-002]
+│   │   ├── Status: 🔨 in_progress
 │   │   └── ...
 │   └── ...
 ├── Non-Functional Requirements
@@ -137,15 +168,174 @@ Spec Document
 ```
 
 **Key properties:**
-- Every requirement has a **unique, stable ID** (FR-001, NFR-001) that persists across versions.
+- Every requirement has a **unique, stable ID** (FR-001, NFR-001) that persists across versions and branches.
 - Requirements **link back to discovery** — why does this requirement exist?
-- The document is **versioned like git** — branches, diffs, merges, history.
-- Sections can be in different **states**: draft, review, approved, implemented, deprecated.
+- The Master Spec is **branched like git** — work on branches, merge when approved.
+- Each requirement has an individual **status**: draft, approved, plan_generated, in_progress, implemented, verified, deprecated.
 - **AI-assisted writing**: LLM drafts requirements from discovery notes, human refines.
 - **Collaborative editing** with comments, suggestions, and approval flows.
-- **The system enforces**: you can't create a technical plan without an approved spec.
+- **The system enforces**: you can't promote a requirement to a plan unless it's approved in the Master Spec (or an approved branch).
 
-### 3.2 The Derivation Chain
+### 3.3 The Spec Dashboard (Spec = Ticket)
+
+The spec is NOT a long document you scroll through. It's a **dashboard of requirement cards** — each requirement is a "ticket" you can act on.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Acme Checkout Redesign — Spec Dashboard                    [main ▼]│
+│                                                    Branch: master   │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Filter: [All ▼] [Status ▼] [Owner ▼]     Search: [___________]   │
+│                                                                     │
+│  ┌─ Functional Requirements ────────────────────────────────────┐  │
+│  │                                                               │  │
+│  │  ┌──────────────────────┐  ┌──────────────────────┐          │  │
+│  │  │ FR-001               │  │ FR-002               │          │  │
+│  │  │ Checkout in 3 steps  │  │ Real-time validation │          │  │
+│  │  │                      │  │                      │          │  │
+│  │  │ ✅ Implemented       │  │ 🔨 In Progress      │          │  │
+│  │  │ Plan: TP-001         │  │ Plan: TP-002         │          │  │
+│  │  │ 2 commits · 0 bugs  │  │ 1 commit · 1 bug     │          │  │
+│  │  │                      │  │                      │          │  │
+│  │  │ [@carlos] [3 days]   │  │ [@dev1] [today]      │          │  │
+│  │  │ [View] [▶ Promote]   │  │ [View] [▶ Promote]   │          │  │
+│  │  └──────────────────────┘  └──────────────────────┘          │  │
+│  │                                                               │  │
+│  │  ┌──────────────────────┐  ┌──────────────────────┐          │  │
+│  │  │ FR-003               │  │ FR-004               │          │  │
+│  │  │ Order confirmation   │  │ Guest checkout       │          │  │
+│  │  │                      │  │                      │          │  │
+│  │  │ 📋 Approved          │  │ 📝 Draft             │          │  │
+│  │  │ No plan yet          │  │ No plan yet          │          │  │
+│  │  │ —                    │  │ —                     │          │  │
+│  │  │                      │  │                      │          │  │
+│  │  │ [@maria] [1 week]    │  │ [@maria] [today]     │          │  │
+│  │  │ [View] [▶ Promote]   │  │ [View] [Edit]        │          │  │
+│  │  └──────────────────────┘  └──────────────────────┘          │  │
+│  │                                                               │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  ┌─ Non-Functional Requirements ────────────────────────────────┐  │
+│  │  ┌──────────────────────┐                                     │  │
+│  │  │ NFR-001              │                                     │  │
+│  │  │ Checkout < 2s p99    │                                     │  │
+│  │  │ 📋 Approved          │                                     │  │
+│  │  │ [View] [▶ Promote]   │                                     │  │
+│  │  └──────────────────────┘                                     │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  Summary: 4 FR + 1 NFR │ 1 implemented │ 1 in progress │ 3 pending│
+│                                                                     │
+│  Branches: [master] [add-2fa ●2 new] [simplify-returns ●1 mod]    │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key UX decisions:**
+
+- **Each requirement is a card** — shows status, linked plan, commits, bugs, owner, age.
+- **The [▶ Promote] button** — the central action. Click it to promote a spec requirement to a technical plan. Only available when the requirement is in `approved` state.
+- **Branch selector** — switch between Master Spec and branches. See what's in draft, what's under review, what's ready to merge.
+- **Filterable/searchable** — by status, owner, keyword. For large specs this is essential.
+- **Summary bar** — at-a-glance: how many requirements, how many implemented, how many pending.
+
+#### The "Promote to Plan" Flow (UI-Driven)
+
+When a user clicks **[▶ Promote]** on a requirement card:
+
+```
+Step 1: Select requirements to include in the plan
+┌──────────────────────────────────────────────────┐
+│  Promote to Technical Plan                       │
+│                                                  │
+│  Primary: FR-003 (Order confirmation)            │
+│                                                  │
+│  Include related requirements?                   │
+│  ☑ FR-001 (Checkout in 3 steps) — related       │
+│  ☑ NFR-001 (Checkout < 2s p99) — constraint     │
+│  ☐ FR-002 (Real-time validation) — suggested    │
+│                                                  │
+│  [Cancel]                    [Generate Plan →]   │
+└──────────────────────────────────────────────────┘
+
+Step 2: AI generates plan draft (loading state, ~30s)
+┌──────────────────────────────────────────────────┐
+│  Generating Technical Plan...                    │
+│                                                  │
+│  Reading: FR-003 + related requirements          │
+│  Reading: existing codebase (github.com/acme/...)│
+│  Analyzing: architecture constraints             │
+│  ████████████░░░░░░░░░ 60%                       │
+│                                                  │
+└──────────────────────────────────────────────────┘
+
+Step 3: Review & edit the generated plan
+┌──────────────────────────────────────────────────┐
+│  Technical Plan: TP-003 (draft)                  │
+│  Derived from: FR-003, FR-001, NFR-001           │
+│                                                  │
+│  ## Architecture Decisions                       │
+│  - Use existing order service, add confirmation  │
+│    endpoint (Rationale: reuse > new service)     │
+│  - Email via SendGrid (existing integration)     │
+│                                                  │
+│  ## Implementation Steps                         │
+│  1. Add confirmation template to email service   │
+│  2. Create POST /orders/:id/confirm endpoint     │
+│  3. Add webhook for payment provider callback    │
+│  4. Update order status state machine            │
+│                                                  │
+│  ## Estimated Scope                              │
+│  Files: ~4 │ Tests: ~8 │ Complexity: Medium      │
+│                                                  │
+│  [Edit Plan] [Request Review] [Approve & Lock]   │
+└──────────────────────────────────────────────────┘
+
+Step 4: Approved plan → unlocks [▶ Build] button on the card
+```
+
+**After promotion, the requirement card updates:**
+
+```
+┌──────────────────────┐
+│ FR-003               │
+│ Order confirmation   │
+│                      │
+│ 📐 Plan Ready        │   ← status changed
+│ Plan: TP-003 ✅      │   ← plan linked
+│ —                    │
+│                      │
+│ [@carlos] [today]    │
+│ [View] [▶ Build]     │   ← action changed to Build
+└──────────────────────┘
+```
+
+### 3.4 The Requirement Lifecycle (Card States)
+
+Each requirement card progresses through a clear lifecycle:
+
+```
+📝 Draft ──→ 📋 Approved ──→ 📐 Plan Ready ──→ 🔨 Building ──→ ✅ Implemented ──→ ✔ Verified
+                │                                                       │
+                │         ← spec branch merged                          │
+                │                                                       ↓
+                └──── can be re-opened if ────────────────────── 🐛 Has Bugs
+                      spec changes or
+                      bugs found
+```
+
+| State | Meaning | Available Actions |
+|-------|---------|-------------------|
+| 📝 Draft | Requirement being written | Edit, Delete |
+| 📋 Approved | Reviewed & approved in Master Spec (or approved branch) | **▶ Promote to Plan** |
+| 📐 Plan Ready | Technical plan generated & approved | **▶ Build** (launch AI session) |
+| 🔨 Building | AI agent implementing | Monitor, Pause |
+| ✅ Implemented | Code committed, tests passing | Mark Verified, Report Bug |
+| ✔ Verified | Human confirmed it works | — (terminal state) |
+| 🐛 Has Bugs | Bug linked to this requirement | View Bugs, ▶ Fix Plan |
+
+### 3.5 The Derivation Chain
 
 The core innovation. Every artifact in the system is linked in a directed acyclic graph:
 
@@ -167,7 +357,7 @@ This chain enables:
 - **Impact analysis**: "If I change FR-001, what code, tests, and plans are affected?"
 - **Coverage analysis**: "Which requirements have no implementation? Which have no tests?"
 
-### 3.3 Technical Plans
+### 3.6 Technical Plans
 
 A technical plan is a *derived artifact* from one or more spec requirements. It describes *how* something will be implemented.
 
@@ -193,7 +383,7 @@ Technical Plan (TP-001)
 - Every decision records *why* and *what alternatives were considered*.
 - Versioned independently from the spec (spec v3 might still use plan v1).
 
-### 3.4 Implementation Sessions (The LLM Git)
+### 3.7 Implementation Sessions (The LLM Git)
 
 When an AI agent (Claude Code, Codex, Cursor, etc.) implements a plan, the session is captured:
 
@@ -222,7 +412,7 @@ Implementation Session (IS-001)
 - **Deviations from plan are flagged** — when the agent makes a decision not covered by the plan.
 - Spec coverage is computed automatically by tracing the chain.
 
-### 3.5 The Changelog (Spec Evolution)
+### 3.8 The Changelog (Spec Evolution)
 
 When the spec changes, the system tracks:
 
@@ -459,23 +649,25 @@ For the first version:
 
 2. **Lightweight Discovery** — Add research notes (markdown). AI summarizes and extracts themes/hypotheses. Mark as "ready to spec."
 
-3. **Spec Editor** — Create and version functional specs with structured requirements (IDs, acceptance criteria). Markdown-based with schema enforcement. AI drafts from discovery notes.
+3. **Spec Dashboard** — The primary UI. Requirements displayed as cards with status, owner, linked plans, commits, and bugs. Filterable and searchable. Branch selector to switch between Master Spec and working branches.
 
-4. **Plan Generation** — Given an approved spec, AI generates a technical plan. Human review + approval workflow. Decision log with rationale.
+4. **Master Spec + Branching** — The Master Spec as stable branch. Create branches to draft new requirements or modify existing ones. Review and merge flow (like a PR for specs).
 
-5. **Claude Code Integration** — Launch a Claude Code session with spec + plan context injected. Capture the session log and link commits to the plan.
+5. **Promote to Plan (from UI)** — Click [▶ Promote] on an approved requirement card. Select related requirements. AI generates a technical plan draft. Human reviews, edits, approves. Plan links back to the requirement card.
 
-6. **Project Dashboard** — Lifecycle status per project. Basic derivation chain view: Discovery → Spec → Plan → Commits. Forward and backward navigation.
+6. **Build from Plan (from UI)** — Click [▶ Build] on a plan-ready card. Launches a Claude Code session with spec + plan context injected. Session recorded and linked. Card status updates in real-time.
 
-7. **Spec Versioning** — Linear version history for specs. Diff viewer. Impact notifications when spec changes.
+7. **Spec Versioning** — Full version history per requirement and per branch. Diff viewer between versions. Impact notifications when a merged spec change affects existing plans.
+
+8. **Basic Traceability** — From any card: see discovery notes → spec → plan → commits. Forward and backward navigation.
 
 ### Explicitly NOT in MVP:
 - Multi-agent support (Codex, Cursor, etc.) — Claude Code only
 - Automated spec-from-code (reverse engineering)
 - CI/CD integration
 - Advanced analytics / drift detection
-- Branching/merging of specs (linear versioning only)
 - Bug tracking integration (manual linking only)
+- Parallel branches with conflict resolution (simple linear merges only in v0.1)
 
 ---
 
@@ -493,19 +685,21 @@ For the first version:
 
 ## 10. Open Questions
 
-1. **Storage model**: Do we build our own version store, or use git under the hood with a structured overlay? (Git has great tooling but isn't designed for structured docs.)
+1. **Storage model**: Do we build our own version store, or use git under the hood with a structured overlay? The branching model for Master Spec feels very git-like — could we literally use git for specs?
 
-2. **Granularity of spec IDs**: Requirement level? Acceptance criteria level? How fine-grained should traceability go?
+2. **Granularity of traceability**: Requirement level (FR-001) or acceptance criteria level (FR-001.AC-3)? How deep does the card go?
 
-3. **Agent-agnostic vs agent-specific**: How much do we invest in being agent-agnostic (supporting any LLM tool) vs going deep with one (Claude Code)?
+3. **Agent-agnostic vs agent-specific**: MVP is Claude Code only. But should the plan schema be agent-neutral from day one?
 
-4. **Pricing model**: Per-seat (like Notion)? Per-spec? Per-session? Usage-based on LLM calls?
+4. **Pricing model**: Per-seat (like Notion)? Per-project? Per-session? Usage-based on LLM calls for plan generation?
 
-5. **Spec language**: Pure Markdown? A DSL? Visual editor? How structured vs flexible?
+5. **Spec card detail**: How much info on the card vs. the detail view? Cards that are too dense become noisy. Cards that are too sparse lose the "dashboard" feel.
 
-6. **Enforcement model**: Do we *hard-block* code without a spec, or just strongly encourage? (Hard-block is purer but adoption friction is higher.)
+6. **Branch permissions**: Can anyone create a spec branch, or only certain roles? Who can merge to Master?
 
-7. **Collaboration model**: Who owns the spec? One owner or collaborative like Google Docs? What's the approval flow?
+7. **Promote granularity**: Promote one requirement at a time, or a group? Can a single plan span multiple requirements? (Current design says yes — is that right?)
+
+8. **Offline/local mode**: Does this need to work offline, or is cloud-only acceptable for MVP?
 
 ---
 
@@ -543,4 +737,6 @@ The moat isn't any single feature. It's the **network effect of the derivation g
 
 ---
 
-*This is a living document. v0.2 — added project-as-repository model, discovery phase, human harness pattern. Let's iterate.*
+*This is a living document.*
+*v0.2 — added project-as-repository model, discovery phase, human harness pattern.*
+*v0.3 — added Spec Dashboard (spec=ticket), Master Spec with branching, Promote-to-Plan UI flow, requirement lifecycle states.*
